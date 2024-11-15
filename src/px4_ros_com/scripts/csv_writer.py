@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from px4_msgs.msg import VehicleLocalPosition, VehicleOdometry, VehicleLocalPositionSetpoint
+from px4_msgs.msg import VehicleLocalPosition, VehicleOdometry, VehicleLocalPositionSetpoint, ActuatorMotors
 from std_msgs.msg import Bool  # Import Bool message type
 import csv
 from datetime import datetime
@@ -21,6 +21,7 @@ class PX4DataSubscriber(Node):
         self.acceleration = None
         self.angular_rate = None
         self.position_setpoint = None
+        self.motor_controls = None  # Variable to store motor control inputs
         self.recording = False  # Variable to control recording status
 
         self.position_subscription = self.create_subscription(
@@ -35,11 +36,17 @@ class PX4DataSubscriber(Node):
             self.angular_rate_callback,
             qos_profile)
 
-        self.position_setpoint_subscription = self.create_subscription(
-            VehicleLocalPositionSetpoint,
-            '/vehicle_position_setpoint',
-            self.position_setpoint_callback,
+        self.output_subscription = self.create_subscription(
+            ActuatorMotors,
+            '/fmu/out/actuator_motors',
+            self.motor_controls_callback,
             qos_profile)
+
+        # self.position_setpoint_subscription = self.create_subscription(
+        #     VehicleLocalPositionSetpoint,
+        #     '/vehicle_position_setpoint',
+        #     self.position_setpoint_callback,
+        #     qos_profile)
 
         # Subscription to the /input/done topic
         self.done_subscription = self.create_subscription(
@@ -66,7 +73,7 @@ class PX4DataSubscriber(Node):
             # Open CSV file for writing
             self.csv_file = open('px4_data.csv', 'w', newline='')
             self.csv_writer = csv.writer(self.csv_file)
-            self.csv_writer.writerow(['timestamp', 'position', 'velocity', 'acceleration', 'angular_rate', 'position_setpoint'])
+            self.csv_writer.writerow(['timestamp', 'position', 'velocity', 'acceleration', 'angular_rate', 'motor_controls'])
             # Create timer for writing data to CSV at 10 Hz
             self.timer = self.create_timer(0.1, self.write_to_csv)
 
@@ -93,23 +100,23 @@ class PX4DataSubscriber(Node):
     def position_setpoint_callback(self, msg):
         self.position_setpoint = [msg.x, msg.y, msg.z]
 
-    def write_to_csv(self):
-        timestamp = datetime.now()
+    def motor_controls_callback(self, msg):
+        self.motor_controls = msg.control[:4]  # Assuming the first four controls are the motor inputs
 
-        # Format to show hours, minutes, seconds, and milliseconds
-        timestamp = timestamp.strftime("%H:%M:%S.%f")[:-3]
+    def write_to_csv(self):
+        timestamp = datetime.now().isoformat()
         position = self.position if self.position else 'None'
         velocity = self.velocity if self.velocity else 'None'
         acceleration = self.acceleration if self.acceleration else 'None'
         angular_rate = self.angular_rate if self.angular_rate else 'None'
-        position_setpoint = self.position_setpoint if self.position_setpoint else 'None'
+        motor_controls = self.motor_controls.tolist() if self.motor_controls is not None else 'None'
 
-        self.csv_writer.writerow([timestamp, position, velocity, acceleration, angular_rate, position_setpoint])
+        self.csv_writer.writerow([timestamp, position, velocity, acceleration, angular_rate, motor_controls])
 
     def destroy(self):
         # Ensure recording stops and resources are released
         self.stop_recording()
-        super().destroy()
+        super(PX4DataSubscriber, self).destroy_node()
 
 def main(args=None):
     rclpy.init(args=args)

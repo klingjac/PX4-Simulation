@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from px4_msgs.msg import VehicleLocalPosition, VehicleOdometry, VehicleLocalPositionSetpoint
+from px4_msgs.msg import VehicleLocalPosition, VehicleOdometry, VehicleLocalPositionSetpoint, ActuatorControls
 from std_msgs.msg import Bool  # Import Bool message type
 import csv
 from datetime import datetime
@@ -21,6 +21,7 @@ class PX4DataSubscriber(Node):
         self.acceleration = None
         self.angular_rate = None
         self.position_setpoint = None
+        self.motor_inputs = None  # Variable to store motor inputs
         self.recording = False  # Variable to control recording status
 
         self.position_subscription = self.create_subscription(
@@ -33,6 +34,12 @@ class PX4DataSubscriber(Node):
             VehicleOdometry,
             '/fmu/out/vehicle_odometry',
             self.angular_rate_callback,
+            qos_profile)
+
+        self.output_subscription = self.create_subscription(
+            ActuatorControls,
+            '/fmu/out/actuator_controls_0',
+            self.motor_inputs_callback,
             qos_profile)
 
         # self.position_setpoint_subscription = self.create_subscription(
@@ -66,7 +73,7 @@ class PX4DataSubscriber(Node):
             # Open CSV file for writing
             self.csv_file = open('px4_data.csv', 'w', newline='')
             self.csv_writer = csv.writer(self.csv_file)
-            self.csv_writer.writerow(['timestamp', 'position', 'velocity', 'acceleration', 'angular_rate'])
+            self.csv_writer.writerow(['timestamp', 'position', 'velocity', 'acceleration', 'angular_rate', 'motor_inputs'])
             # Create timer for writing data to CSV at 10 Hz
             self.timer = self.create_timer(0.1, self.write_to_csv)
 
@@ -93,15 +100,18 @@ class PX4DataSubscriber(Node):
     def position_setpoint_callback(self, msg):
         self.position_setpoint = [msg.x, msg.y, msg.z]
 
+    def motor_inputs_callback(self, msg):
+        self.motor_inputs = msg.control[:4]  # Assuming the first four controls are motor inputs
+
     def write_to_csv(self):
         timestamp = datetime.now().isoformat()
         position = self.position if self.position else 'None'
         velocity = self.velocity if self.velocity else 'None'
         acceleration = self.acceleration if self.acceleration else 'None'
         angular_rate = self.angular_rate if self.angular_rate else 'None'
-        position_setpoint = self.position_setpoint if self.position_setpoint else 'None'
+        motor_inputs = self.motor_inputs if self.motor_inputs else 'None'
 
-        self.csv_writer.writerow([timestamp, position, velocity, acceleration, angular_rate])
+        self.csv_writer.writerow([timestamp, position, velocity, acceleration, angular_rate, motor_inputs])
 
     def destroy(self):
         # Ensure recording stops and resources are released
