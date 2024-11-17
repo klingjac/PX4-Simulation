@@ -22,7 +22,7 @@ public:
     {
         std::string input;
 
-        std::cout << "Enter setpoints as a list (format: x1 y1 z1 yaw1, x2 y2 z2 yaw2, ...) or 'done': ";
+        std::cout << "Enter setpoints as a list (format: x1 y1 z1 yaw1, x2 y2 z2 yaw2, ...): ";
         std::getline(std::cin, input);
 
         if (input == "done")
