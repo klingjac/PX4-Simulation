@@ -4,6 +4,7 @@
 #include <std_msgs/msg/bool.hpp>
 #include <iostream>
 #include <string>
+#include <sstream>
 #include <vector>
 
 class SetpointInputNode : public rclcpp::Node
@@ -13,7 +14,6 @@ public:
     {
         setpoint_publisher_ = this->create_publisher<px4_msgs::msg::TrajectorySetpoint>("/input/setpoints", 10);
         done_publisher_ = this->create_publisher<std_msgs::msg::Bool>("/input/done", 10);
-        
 
         take_input();
     }
@@ -22,38 +22,48 @@ public:
     {
         std::string input;
 
-        
-        while (true)
-        {
-            std::cout << "Enter setpoint (format: x y z yaw) or 'done': ";
-            std::getline(std::cin, input);
+        std::cout << "Enter setpoints as a list (format: x1 y1 z1 yaw1, x2 y2 z2 yaw2, ...) or 'done': ";
+        std::getline(std::cin, input);
 
-            if (input == "done")
-            {
-                std_msgs::msg::Bool done_msg;
-                done_msg.data = true;
-                done_publisher_->publish(done_msg);
-                break;
-            }
-            else
-            {
-                px4_msgs::msg::TrajectorySetpoint setpoint = parse_input(input);
-                setpoint_publisher_->publish(setpoint);
-            }
+        if (input == "done")
+        {
+            std_msgs::msg::Bool done_msg;
+            done_msg.data = true;
+            done_publisher_->publish(done_msg);
+            return;
         }
+
+        std::vector<px4_msgs::msg::TrajectorySetpoint> setpoints = parse_input(input);
+        for (const auto &setpoint : setpoints)
+        {
+            setpoint_publisher_->publish(setpoint);
+        }
+
+        // Publish "done" message after parsing and publishing all setpoints
+        std_msgs::msg::Bool done_msg;
+        done_msg.data = true;
+        done_publisher_->publish(done_msg);
     }
 
-    px4_msgs::msg::TrajectorySetpoint parse_input(const std::string &input)
+    std::vector<px4_msgs::msg::TrajectorySetpoint> parse_input(const std::string &input)
     {
+        std::vector<px4_msgs::msg::TrajectorySetpoint> setpoints;
         std::istringstream iss(input);
-        float x, y, z, yaw;
-        iss >> x >> y >> z >> yaw;
+        std::string point_str;
 
-        px4_msgs::msg::TrajectorySetpoint setpoint;
-        setpoint.position = {x, y, z};
-        setpoint.yaw = yaw;
-        // You can also set other parameters like yaw here
-        return setpoint;
+        while (std::getline(iss, point_str, ','))
+        {
+            std::istringstream point_stream(point_str);
+            float x, y, z, yaw;
+            point_stream >> x >> y >> z >> yaw;
+
+            px4_msgs::msg::TrajectorySetpoint setpoint;
+            setpoint.position = {x, y, z};
+            setpoint.yaw = yaw;
+            setpoints.push_back(setpoint);
+        }
+
+        return setpoints;
     }
 
 private:
